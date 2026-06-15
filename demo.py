@@ -1,0 +1,149 @@
+import pandas as pd
+from group_ranking import GroupRankingService
+
+
+def create_sample_data():
+    data = {
+        '员工': ['张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十',
+                '郑十一', '王十二', '冯十三', '陈十四'],
+        '部门': ['销售部', '销售部', '销售部', '销售部', '销售部',
+                '技术部', '技术部', '技术部', '技术部',
+                '市场部', '市场部', '市场部'],
+        '销售额': [120, 150, 150, 100, 80,
+                   200, 180, 180, 180,
+                   90, 110, 110],
+        '完成率': [0.85, 0.92, 0.92, 0.78, 0.65,
+                   0.95, 0.88, 0.91, 0.88,
+                   0.72, 0.83, 0.85],
+    }
+    return pd.DataFrame(data)
+
+
+def demo_basic_ranking():
+    print("=" * 70)
+    print("【示例1】基础分组排名 - 各部门内按销售额排名（min方式）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.rank(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        method='min',
+        ascending=False,
+    )
+    print(result.sort_values(['部门', 'rank']).to_string(index=False))
+    print()
+
+
+def demo_compare_methods():
+    print("=" * 70)
+    print("【示例2】对比不同并列处理方式（以销售部为例）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    sales_df = df[df['部门'] == '销售部'].copy()
+
+    print("销售部原始数据：")
+    print(sales_df[['员工', '销售额']].to_string(index=False))
+    print()
+
+    methods = ['min', 'max', 'dense', 'average', 'first']
+    for method in methods:
+        result = service.rank(
+            df=sales_df,
+            group_cols='部门',
+            value_col='销售额',
+            rank_col_name=f'排名({method})',
+            method=method,
+            ascending=False,
+        )
+        print(f"--- {method} 方式 ---")
+        print(result[['员工', '销售额', f'排名({method})']].to_string(index=False))
+        print()
+
+
+def demo_multi_columns():
+    print("=" * 70)
+    print("【示例3】多列同时排名 - 按销售额降序、完成率降序")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.rank_multi_columns(
+        df=df,
+        group_cols='部门',
+        value_cols=['销售额', '完成率'],
+        method='dense',
+        ascending=[False, False],
+    )
+    print(result.sort_values(['部门', '销售额_rank']).to_string(index=False))
+    print()
+
+
+def demo_top_n():
+    print("=" * 70)
+    print("【示例4】各部门前2名（Top N 筛选）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.get_rank_summary(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        method='min',
+        ascending=False,
+        top_n=2,
+    )
+    print(result.to_string(index=False))
+    print()
+
+
+def demo_ascending():
+    print("=" * 70)
+    print("【示例5】升序排名 - 各部门内完成率从低到高（数值小的排前面）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.rank(
+        df=df,
+        group_cols='部门',
+        value_col='完成率',
+        rank_col_name='倒数排名',
+        method='min',
+        ascending=True,
+    )
+    print(result.sort_values(['部门', '倒数排名']).to_string(index=False))
+    print()
+
+
+def demo_pct_rank():
+    print("=" * 70)
+    print("【示例6】百分比排名（pct=True）- 各部门内销售额百分位")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.rank(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        rank_col_name='销售额百分位',
+        method='average',
+        ascending=False,
+        pct=True,
+    )
+    result['销售额百分位'] = result['销售额百分位'].apply(lambda x: f"{x:.1%}")
+    print(result.sort_values(['部门', '销售额百分位']).to_string(index=False))
+    print()
+
+
+if __name__ == '__main__':
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 200)
+    pd.set_option('display.max_colwidth', 30)
+
+    demo_basic_ranking()
+    demo_compare_methods()
+    demo_multi_columns()
+    demo_top_n()
+    demo_ascending()
+    demo_pct_rank()

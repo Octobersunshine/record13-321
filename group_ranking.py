@@ -4,10 +4,11 @@ from typing import Optional, Union, List
 
 class GroupRankingService:
     """
-    分组排名服务：按分组（如部门内）对数值列进行排名，支持多种并列处理方式。
+    分组排名与百分位服务：按分组（如部门内）对数值列进行排名和百分位计算，
+    支持多种并列处理方式。
 
     支持的并列处理方式 (method 参数)：
-        - 'average': 默认，并列名次取平均值（如 1, 2.5, 2.5, 4）
+        - 'average': 并列名次取平均值（如 1, 2.5, 2.5, 4）
         - 'min': 并列名次取最小值（如 1, 2, 2, 4），对应标准比赛排名
         - 'max': 并列名次取最大值（如 1, 3, 3, 4）
         - 'dense': 密集排名，不跳过名次（如 1, 2, 2, 3）
@@ -16,6 +17,7 @@ class GroupRankingService:
 
     VALID_METHODS = {'average', 'min', 'max', 'dense', 'first'}
     VALID_ASCENDING_OPTIONS = {True, False}
+    VALID_NA_OPTIONS = {'keep', 'top', 'bottom'}
 
     def __init__(self):
         pass
@@ -173,6 +175,130 @@ class GroupRankingService:
 
         return ranked_df
 
+    def percentile(
+        self,
+        df: pd.DataFrame,
+        group_cols: Union[str, List[str]],
+        value_col: str,
+        percentile_col_name: str = 'percentile',
+        method: str = 'average',
+        ascending: bool = True,
+        scale: float = 100.0,
+        na_option: str = 'bottom',
+        dropna: bool = True,
+    ) -> pd.DataFrame:
+        """
+        计算每个值在其分组内的百分位数。
+
+        参数:
+            df: 输入的 DataFrame
+            group_cols: 分组列名或列名列表
+            value_col: 要计算百分位的数值列名
+            percentile_col_name: 输出的百分位列名，默认为 'percentile'
+            method: 并列处理方式，可选 'average' | 'min' | 'max' | 'dense' | 'first'
+                    影响值相同时的百分位计算方式
+            ascending: 是否升序百分位。
+                       True=值越大百分位越高（常规百分位，如考试得分率），
+                       False=值越小百分位越高（如耗时、成本越低越好）
+            scale: 百分位尺度，100.0 表示 0-100 分位，1.0 表示 0-1 的比例
+            na_option: 空值处理方式：
+                       'bottom' - 空值百分位最低（排最后）
+                       'top' - 空值百分位最高（排最前）
+                       'keep' - 空值保持 NaN
+            dropna: 排名计算时是否排除空值
+
+        返回:
+            新增了百分位列的 DataFrame（副本，不修改原数据）
+        """
+        self._validate_params(df, group_cols, value_col, method, ascending, na_option)
+
+        if scale <= 0:
+            raise ValueError("scale 必须大于 0")
+
+        result_df = df.copy()
+
+        if isinstance(group_cols, str):
+            group_cols = [group_cols]
+
+        pct_series = result_df.groupby(group_cols, dropna=dropna)[value_col].rank(
+            method=method,
+            ascending=ascending,
+            na_option='keep',
+            pct=True,
+        )
+
+        if na_option == 'bottom':
+            pct_series = pct_series.fillna(0.0)
+        elif na_option == 'top':
+            pct_series = pct_series.fillna(1.0)
+
+        if scale != 1.0:
+            pct_series = pct_series * scale
+
+        result_df[percentile_col_name] = pct_series
+
+        return result_df
+
+    def percentile_multi_columns(
+        self,
+        df: pd.DataFrame,
+        group_cols: Union[str, List[str]],
+        value_cols: Union[str, List[str]],
+        percentile_col_suffix: str = '_percentile',
+        method: str = 'average',
+        ascending: Union[bool, List[bool]] = True,
+        scale: float = 100.0,
+        na_option: str = 'bottom',
+        dropna: bool = True,
+    ) -> pd.DataFrame:
+        """
+        对多个数值列分别计算分组百分位。
+
+        参数:
+            df: 输入的 DataFrame
+            group_cols: 分组列名或列名列表
+            value_cols: 要计算百分位的数值列名或列名列表
+            percentile_col_suffix: 百分位列名后缀，例如 '_百分位' -> '销售额_百分位'
+            method: 并列处理方式
+            ascending: 全局升序/降序标志，或对应每个 value_col 的布尔列表
+            scale: 百分位尺度，100.0 表示 0-100 分位
+            na_option: 空值处理方式，默认 'bottom'
+            dropna: 排名计算时是否排除空值
+
+        返回:
+            新增了多个百分位列的 DataFrame
+        """
+        if isinstance(value_cols, str):
+            value_cols = [value_cols]
+
+        if isinstance(ascending, bool):
+            ascending_list = [ascending] * len(value_cols)
+        else:
+            ascending_list = list(ascending)
+            if len(ascending_list) != len(value_cols):
+                raise ValueError(
+                    f"ascending 列表长度 ({len(ascending_list)}) 必须 "
+                    f"与 value_cols 长度 ({len(value_cols)}) 一致"
+                )
+
+        result_df = df.copy()
+
+        for value_col, asc in zip(value_cols, ascending_list):
+            percentile_col_name = f"{value_col}{percentile_col_suffix}"
+            result_df = self.percentile(
+                df=result_df,
+                group_cols=group_cols,
+                value_col=value_col,
+                percentile_col_name=percentile_col_name,
+                method=method,
+                ascending=asc,
+                scale=scale,
+                na_option=na_option,
+                dropna=dropna,
+            )
+
+        return result_df
+
     def _validate_params(
         self,
         df: pd.DataFrame,
@@ -202,7 +328,7 @@ class GroupRankingService:
         if pd.api.types.is_numeric_dtype(df[value_col]) is False:
             raise TypeError(f"value_col '{value_col}' 必须是数值类型")
 
-        if na_option not in {'keep', 'top', 'bottom'}:
+        if na_option not in self.VALID_NA_OPTIONS:
             raise ValueError(
-                f"无效的 na_option 参数 '{na_option}'，有效值为: 'keep', 'top', 'bottom'"
+                f"无效的 na_option 参数 '{na_option}'，有效值为: {sorted(self.VALID_NA_OPTIONS)}"
             )

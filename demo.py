@@ -224,6 +224,127 @@ def demo_null_top_n():
     print()
 
 
+def demo_percentile_basic():
+    print("=" * 70)
+    print("【示例10】分组百分位 - 各部门内销售额百分位（值越高百分位越高）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.percentile(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        method='average',
+        ascending=True,
+        scale=100.0,
+    )
+    result['销售额百分位'] = result['percentile'].apply(lambda x: f"{x:.1f}" if pd.notna(x) else "NaN")
+    display_cols = ['员工', '部门', '销售额', '销售额百分位']
+    print(result.sort_values(['部门', '销售额'], ascending=[True, False])[display_cols].to_string(index=False))
+    print()
+
+
+def demo_percentile_compare_methods():
+    print("=" * 70)
+    print("【示例11】不同并列方式下的百分位对比（以销售部为例）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    sales_df = df[df['部门'] == '销售部'].copy()
+
+    methods = ['min', 'max', 'average', 'dense', 'first']
+    result = sales_df[['员工', '销售额']].copy()
+
+    for method in methods:
+        pct_df = service.percentile(
+            df=sales_df,
+            group_cols='部门',
+            value_col='销售额',
+            percentile_col_name=f'百分位({method})',
+            method=method,
+            ascending=True,
+            scale=100.0,
+        )
+        result[f'百分位({method})'] = pct_df[f'百分位({method})'].apply(
+            lambda x: f"{x:.1f}" if pd.notna(x) else "NaN"
+        )
+
+    print(result.sort_values('销售额', ascending=False).to_string(index=False))
+    print()
+
+
+def demo_percentile_descending():
+    print("=" * 70)
+    print("【示例12】降序百分位 - 完成率越低百分位越高（倒数百分位）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.percentile(
+        df=df,
+        group_cols='部门',
+        value_col='完成率',
+        percentile_col_name='完成率_倒数百分位',
+        method='average',
+        ascending=False,
+        scale=100.0,
+    )
+    result['完成率_倒数百分位_fmt'] = result['完成率_倒数百分位'].apply(
+        lambda x: f"{x:.1f}" if pd.notna(x) else "NaN"
+    )
+    display_cols = ['员工', '部门', '完成率', '完成率_倒数百分位_fmt']
+    print(result.sort_values(['部门', '完成率'])[display_cols].to_string(index=False))
+    print()
+
+
+def demo_percentile_multi_columns():
+    print("=" * 70)
+    print("【示例13】多列百分位同时计算 - 销售额和完成率")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data()
+    result = service.percentile_multi_columns(
+        df=df,
+        group_cols='部门',
+        value_cols=['销售额', '完成率'],
+        percentile_col_suffix='_百分位',
+        method='average',
+        ascending=[True, True],
+        scale=100.0,
+    )
+    result['销售额_百分位_fmt'] = result['销售额_百分位'].apply(
+        lambda x: f"{x:.1f}" if pd.notna(x) else "NaN"
+    )
+    result['完成率_百分位_fmt'] = result['完成率_百分位'].apply(
+        lambda x: f"{x:.1f}" if pd.notna(x) else "NaN"
+    )
+    display_cols = ['员工', '部门', '销售额', '销售额_百分位_fmt', '完成率', '完成率_百分位_fmt']
+    print(result.sort_values(['部门', '销售额'], ascending=[True, False])[display_cols].to_string(index=False))
+    print()
+
+
+def demo_percentile_with_nulls():
+    print("=" * 70)
+    print("【示例14】含空值的百分位 - 空值排最后（百分位最低）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data_with_nulls()
+    result = service.percentile(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        method='average',
+        ascending=True,
+        na_option='bottom',
+        scale=100.0,
+    )
+    result['销售额百分位'] = result['percentile'].apply(
+        lambda x: f"{x:.1f}" if pd.notna(x) else "NaN"
+    )
+    display_cols = ['员工', '部门', '销售额', '销售额百分位']
+    print(result.sort_values(['部门', '销售额'], ascending=[True, False], na_position='last')[display_cols].to_string(index=False))
+    print()
+
+
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 200)
@@ -238,3 +359,8 @@ if __name__ == '__main__':
     demo_null_ranking()
     demo_null_multi_columns()
     demo_null_top_n()
+    demo_percentile_basic()
+    demo_percentile_compare_methods()
+    demo_percentile_descending()
+    demo_percentile_multi_columns()
+    demo_percentile_with_nulls()

@@ -28,7 +28,7 @@ class GroupRankingService:
         rank_col_name: str = 'rank',
         method: str = 'min',
         ascending: bool = False,
-        na_option: str = 'keep',
+        na_option: str = 'bottom',
         pct: bool = False,
         dropna: bool = True,
     ) -> pd.DataFrame:
@@ -43,7 +43,7 @@ class GroupRankingService:
             method: 并列处理方式，可选 'average' | 'min' | 'max' | 'dense' | 'first'
             ascending: 是否升序排名。False=值越大排名越靠前（适用于销售额、得分等），
                        True=值越小排名越靠前（适用于耗时、成本等）
-            na_option: 空值处理方式，'keep' | 'top' | 'bottom'
+            na_option: 空值处理方式，默认 'bottom'（空值统一排最后），可选 'keep' | 'top' | 'bottom'
             pct: 是否以百分比形式显示排名
             dropna: 排名计算时是否排除空值
 
@@ -64,7 +64,7 @@ class GroupRankingService:
             pct=pct,
         )
         if method in {'min', 'max', 'dense', 'first'} and not pct:
-            ranked_series = ranked_series.astype(int)
+            ranked_series = ranked_series.astype('Int64')
         result_df[rank_col_name] = ranked_series
 
         return result_df
@@ -77,7 +77,7 @@ class GroupRankingService:
         rank_col_suffix: str = '_rank',
         method: str = 'min',
         ascending: Union[bool, List[bool]] = False,
-        na_option: str = 'keep',
+        na_option: str = 'bottom',
         pct: bool = False,
         dropna: bool = True,
     ) -> pd.DataFrame:
@@ -91,7 +91,7 @@ class GroupRankingService:
             rank_col_suffix: 排名列名后缀，例如 '_rank' -> '销售额_rank'
             method: 并列处理方式
             ascending: 全局升序/降序标志，或对应每个 value_col 的布尔列表
-            na_option: 空值处理方式
+            na_option: 空值处理方式，默认 'bottom'（空值统一排最后）
             pct: 是否以百分比形式显示排名
             dropna: 排名计算时是否排除空值
 
@@ -166,7 +166,7 @@ class GroupRankingService:
             group_cols_list = list(group_cols)
 
         sort_cols = group_cols_list + ['rank']
-        ranked_df = ranked_df.sort_values(sort_cols).reset_index(drop=True)
+        ranked_df = ranked_df.sort_values(sort_cols, na_position='last').reset_index(drop=True)
 
         if top_n is not None:
             ranked_df = ranked_df[ranked_df['rank'] <= top_n].reset_index(drop=True)

@@ -136,6 +136,94 @@ def demo_pct_rank():
     print()
 
 
+def create_sample_data_with_nulls():
+    data = {
+        '员工': ['张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十',
+                '郑十一', '王十二', '冯十三', '陈十四'],
+        '部门': ['销售部', '销售部', '销售部', '销售部', '销售部',
+                '技术部', '技术部', '技术部', '技术部',
+                '市场部', '市场部', '市场部'],
+        '销售额': [120, None, 150, None, 80,
+                   200, None, 180, 180,
+                   90, 110, None],
+        '完成率': [0.85, None, 0.92, 0.78, 0.65,
+                   0.95, 0.88, None, 0.88,
+                   0.72, None, 0.85],
+    }
+    return pd.DataFrame(data)
+
+
+def demo_null_ranking():
+    print("=" * 70)
+    print("【示例7】含空值排名 - 空值统一排最后（na_option='bottom'）")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data_with_nulls()
+    print("含空值的原始数据：")
+    print(df.to_string(index=False))
+    print()
+
+    for method in ['min', 'max', 'dense', 'first']:
+        result = service.rank(
+            df=df,
+            group_cols='部门',
+            value_col='销售额',
+            rank_col_name=f'排名({method})',
+            method=method,
+            ascending=False,
+        )
+        print(f"--- {method} 方式 ---")
+        print(result[['员工', '部门', '销售额', f'排名({method})']].to_string(index=False))
+        print()
+
+    print("--- average 方式 ---")
+    result = service.rank(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        rank_col_name='排名(average)',
+        method='average',
+        ascending=False,
+    )
+    print(result[['员工', '部门', '销售额', '排名(average)']].to_string(index=False))
+    print()
+
+
+def demo_null_multi_columns():
+    print("=" * 70)
+    print("【示例8】含空值的多列排名 - 空值统一排最后")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data_with_nulls()
+    result = service.rank_multi_columns(
+        df=df,
+        group_cols='部门',
+        value_cols=['销售额', '完成率'],
+        method='dense',
+        ascending=[False, False],
+    )
+    print(result.sort_values(['部门', '销售额_rank'], na_position='last').to_string(index=False))
+    print()
+
+
+def demo_null_top_n():
+    print("=" * 70)
+    print("【示例9】含空值的 Top N 筛选 - 空值不在 Top N 内")
+    print("=" * 70)
+    service = GroupRankingService()
+    df = create_sample_data_with_nulls()
+    result = service.get_rank_summary(
+        df=df,
+        group_cols='部门',
+        value_col='销售额',
+        method='min',
+        ascending=False,
+        top_n=2,
+    )
+    print(result.to_string(index=False))
+    print()
+
+
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 200)
@@ -147,3 +235,6 @@ if __name__ == '__main__':
     demo_top_n()
     demo_ascending()
     demo_pct_rank()
+    demo_null_ranking()
+    demo_null_multi_columns()
+    demo_null_top_n()
